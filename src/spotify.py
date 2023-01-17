@@ -46,9 +46,9 @@ class Spotify:
         result_artists_df, self.artist_url = self._get_artist_info()
         top_song_df = self._get_top_songs()
         all_albums_df = self._get_all_albums()
-        all_songs_df, all_song_feature_df = self._get_all_songs(all_albums_df)
+        all_song_general_info_df, all_song_feature_df = self._get_all_songs(all_albums_df)
 
-        return result_artists_df, top_song_df, all_albums_df, all_songs_df, all_song_feature_df
+        return result_artists_df, top_song_df, all_albums_df, all_song_general_info_df, all_song_feature_df
 
 
     def _get_artist_info(self):
@@ -171,7 +171,7 @@ class Spotify:
         all_song_general_info_df = self._remove_duplicated_tracks_wrapper(all_song_general_info_df, mode = 'find_top_popularity_among_tracks')
 
         all_song_feature_df = self._get_all_songs_with_audio_features(all_songs_df)
-        # all_song_feature_df = self._remove_duplicated_tracks_wrapper(all_song_feature_df, mode = 'remove_outlier')
+        all_song_feature_df = self._remove_duplicated_tracks_wrapper(all_song_feature_df, mode = 'remove_outlier')
 
 
         return all_song_general_info_df, all_song_feature_df
@@ -248,7 +248,7 @@ class Spotify:
         else:
             return True
 
-    def _standard_scaling(self, data):
+    def standard_scaling(self, data):
         scaler = StandardScaler()
         scaler.fit(data)
         scaled_df = pd.DataFrame(scaler.transform(data))
@@ -266,13 +266,12 @@ class Spotify:
         track_df = track_df.copy()
 
         # Drop unnecessary categorical columns 
-        track_df = track_df.drop(['type', 'id', 'uri', 'track_href', 'analysis_url'], axis=1)       
+        track_df = track_df.drop(['type', 'id', 'uri', 'track_href', 'analysis_url'], axis=1)  
 
         track_df = track_df.reset_index(drop = True)
         # Scaling values and see value distribution among those duplicated tracks.
         data = track_df[track_df.columns[1:]]
-        print(data)
-        scaled_df = self._standard_scaling(data)
+        scaled_df = self.standard_scaling(data)
         scaled_df.columns = track_df.columns[1:]
 
         # Define Threshold 
@@ -289,6 +288,7 @@ class Spotify:
 
     def _remove_duplicated_tracks_wrapper(self, songs_df, mode = 'remove_outlier'):
         songs_df = songs_df.copy()
+           
 
         # Get duplicated tracks and counts
         track_count_df = songs_df['name'].value_counts().to_frame().reset_index()
@@ -306,13 +306,29 @@ class Spotify:
             removed_duplicated_tracks_df= duplicated_tracks_df.groupby(['name']).apply(lambda x:self._find_top_popularity_among_same_tracks(x))
 
         elif mode == 'remove_outlier':
-            # For duplicated track, it will remove outlier 
+            # For duplicated track, it will remove outlier  
             removed_duplicated_tracks_df = duplicated_tracks_df.groupby(['name']).apply(lambda x:self._remove_outlier(x))
+
+            # Drop unnecessary categorical columns 
+            not_duplcated_tracks_df = not_duplcated_tracks_df.drop(['type', 'id', 'uri', 'track_href', 'analysis_url'], axis=1)  
 
         # Re-merge two dataframe to make it original 
         cleaned_tracks_df = pd.concat([not_duplcated_tracks_df, removed_duplicated_tracks_df]).reset_index(drop = True)
 
         return cleaned_tracks_df
+
+
+    def filter_by_popularity(self, n_top_tracks = 100):
+        unique_tracks_feat_df = self.all_song_feature_df.copy()
+        tracks_gen_df = self.all_song_general_info_df.copy()
+
+        top_tracks_df = tracks_gen_df.sort_values(by = 'popularity', ascending=False).head(n_top_tracks).reset_index(drop=True)
+
+        filtered_top_tracks_df = unique_tracks_feat_df[unique_tracks_feat_df['name'].isin(top_tracks_df['name'])].reset_index(drop=True)
+
+        return filtered_top_tracks_df
+
+
 
 
     
